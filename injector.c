@@ -4,6 +4,25 @@
 #include <winternl.h>
 
 
+int ExecuteVacBypass(HANDLE hProcess)
+{
+	// VAC is changing the first 5 bytes of ntdll to add a hook that checks if LoadLibrary is used.
+	LPVOID NTOpenFile = GetProcAddress(LoadLibraryW(L"ntdll"), "NtOpenFile");
+
+	if (NTOpenFile)
+	{
+		char originalBytes[5];
+		memcpy(originalBytes, NTOpenFile, 5);
+		int success = WriteProcessMemory(hProcess, NTOpenFile, originalBytes, 5, NULL);
+
+		if (success)
+		{
+			printf("VAC bypassed\n");
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
 DWORD FindProcessId(PWCHAR processname)
 {
 	NTSTATUS status;
@@ -44,6 +63,15 @@ int main()
 		printf("Error getting handle to process, %d", GetLastError());
 		return 1;
 	}
+
+	int VACBypassResult = ExecuteVacBypass(hVictimProcess);
+
+	if (!VACBypassResult)
+	{
+		printf("Couldn't bypass VAC\n");
+		return 1;
+	}
+
 	SYSTEM_INFO sSysInfo;
 	GetSystemInfo(&sSysInfo); // to get System pageSize (dwSize)
 
@@ -94,7 +122,10 @@ int main()
 		return 1;
 	}
 
-	printf("Done, dll injected.");
+	printf("Done, dll injected. Press (enter) to close.");
+
+	while (getchar() != '\n'); // clean input buffer
+	scanf("%0s");
 
 	return 0;
 }
